@@ -7,10 +7,10 @@ from prometheus_client import Histogram, Counter, start_http_server
 load_dotenv()  # Load environment variables from .env file if present
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-MODEL = os.getenv("LLM_MODEL", "gpt-4o-mini")  
+MODEL = os.getenv("LLM_MODEL", "gpt-4o-mini")
 
 if not OPENAI_API_KEY:
-    raise ValueError("OPENAI_API_KEY not set in environment!")
+    raise ValueError("OPENAI_API_KEY not set!")
 
 REQUEST_DURATION = Histogram(
     'llm_request_duration_seconds',
@@ -23,6 +23,15 @@ TOKENS_TOTAL = Counter(
     'Total tokens',
     ['provider', 'model', 'type']
 )
+
+# List of test prompts
+PROMPTS = [
+    "What is supply chain disruption?",
+    "How do manufacturers handle supplier delays?",
+    "What is safety stock in inventory management?",
+    "How does port congestion affect supply chains?",
+    "What is a just-in-time inventory system?",
+]
 
 def tracked_call(prompt: str):
     client = openai.OpenAI(api_key=OPENAI_API_KEY)
@@ -60,8 +69,16 @@ if __name__ == "__main__":
     start_http_server(8000)
     print(f"Metrics at http://localhost:8000/metrics")
     print(f"Using model: {MODEL}")
+    print("Making calls every 10 seconds...")
     
-    response = tracked_call("What is supply chain disruption?")
-    print(response.choices[0].message.content)
-    
-    input("Press Enter to exit...")
+    i = 0
+    while True:
+        prompt = PROMPTS[i % len(PROMPTS)]
+        print(f"\nCalling: {prompt}")
+        
+        response = tracked_call(prompt)
+        print(f"Response: {response.choices[0].message.content[:50]}...")
+        
+        i += 1
+        print(f"Waiting 10 seconds... (call #{i})")
+        time.sleep(10)  # wait 10 seconds between calls
