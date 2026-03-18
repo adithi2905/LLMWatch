@@ -153,12 +153,12 @@ class LLMWatch:
                 return self._tracked_call(messages, **kwargs)
             except Exception as e:
                 error_type = type(e).__name__
-                ERRORS_TOTAL.labels(
-                    provider=self.provider,
-                    model=self.model,
-                    error_type=error_type
-                ).inc()
                 if attempt == self.max_retries:
+                    ERRORS_TOTAL.labels(
+                        provider=self.provider,
+                        model=self.model,
+                        error_type=error_type
+                    ).inc()
                     raise
                 attempt += 1
                 RETRIES_TOTAL.labels(
