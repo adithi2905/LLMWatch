@@ -48,7 +48,7 @@ if __name__ == "__main__":
 
         print(f"Response: {response['content'][:60]}...")
         print(f"Duration: {response['duration']:.2f}s")
-        print(f"Cost:     ${response['cost_usd']:.6f}")  # ← add this
+        print(f"Cost:     ${response['cost_usd']:.6f}")
 
         # Record agent specific metrics
         record_agent_metrics(
