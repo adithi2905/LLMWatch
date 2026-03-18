@@ -22,9 +22,11 @@ Usage:
 
 import time
 import os
+from urllib import response
 from llmwatch.logger import LLMLogger
 from llmwatch.metrics import record_llm_call
 from prometheus_client import Counter
+from llmwatch.metrics import calculate_cost
 
 ERRORS_TOTAL = Counter(
     'llm_errors_total',
@@ -175,12 +177,20 @@ class LLMWatch:
             **kwargs
         )
         duration = time.time() - start
+        
+        cost = calculate_cost(
+        self.model,
+        response["input_tokens"],
+        response["output_tokens"])
+        response["cost_usd"] = cost
+        
+        
         record_llm_call(
             provider=self.provider,
             model=self.model,
             input_tokens=response["input_tokens"],
             output_tokens=response["output_tokens"],
-            duration=duration
+            duration=duration,
         )
         self._logger.log({
             "provider":      self.provider,
@@ -188,7 +198,7 @@ class LLMWatch:
             "input_tokens":  response["input_tokens"],
             "output_tokens": response["output_tokens"],
             "duration":      duration,
-            "cost_usd":      response.get("cost_usd", 0),
+            "cost_usd":      response["cost_usd"],
             "prompt":        messages[-1]["content"],
             "response":      response["content"],
             "error":         None
