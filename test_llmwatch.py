@@ -16,6 +16,13 @@ from llmwatch.metrics import record_agent_metrics
 
 load_dotenv()
 
+def extract_decision(response_content: str) -> str:
+    content_upper = response_content.upper()
+    for decision in ["EXPEDITE", "SWITCH", "WAIT"]:
+        if decision in content_upper:
+            return decision
+    return "UNKNOWN"
+
 if __name__ == "__main__":
     start_http_server(8000)
     print("Metrics at http://localhost:8000/metrics")
@@ -41,13 +48,14 @@ if __name__ == "__main__":
 
         print(f"Response: {response['content'][:60]}...")
         print(f"Duration: {response['duration']:.2f}s")
+        print(f"Cost:     ${response['cost_usd']:.6f}")  # ← add this
 
         # Record agent specific metrics
         record_agent_metrics(
             agent_name=agent_name,
             disagreement_score=0.0,
             debate_turns=1,
-            decision="WAIT",
+            decision=extract_decision(response['content']),
             confidence=0.85
         )
 
