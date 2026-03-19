@@ -22,9 +22,8 @@ Usage:
 
 import time
 import os
-from urllib import response
 from llmwatch.logger import LLMLogger
-from llmwatch.metrics import record_llm_call
+from llmwatch.metrics import TIME_TO_FIRST_TOKEN, record_llm_call
 from prometheus_client import Counter
 from llmwatch.metrics import calculate_cost
 
@@ -65,8 +64,8 @@ def _get_groq_client():
         raise ImportError("Run: pip install groq")
 
 
-def _call_openai(model, messages, max_tokens, **kwargs):
-    client = _get_openai_client()
+def _call_openai(client,model, messages, max_tokens, **kwargs):
+   # client = _get_openai_client() ->removed since we initialize client once in __init__ to reuse connections and reduce latency and cost.
     response = client.chat.completions.create(
         model=model,
         messages=messages,
@@ -82,8 +81,8 @@ def _call_openai(model, messages, max_tokens, **kwargs):
     }
 
 
-def _call_anthropic(model, messages, max_tokens, **kwargs):
-    client = _get_anthropic_client()
+def _call_anthropic(client, model, messages, max_tokens, **kwargs):
+    #client = _get_anthropic_client() -> removed since we initialize client once in __init__ to reuse connections and reduce latency and cost.`
     response = client.messages.create(
         model=model,
         messages=messages,
@@ -99,8 +98,8 @@ def _call_anthropic(model, messages, max_tokens, **kwargs):
     }
 
 
-def _call_groq(model, messages, max_tokens, **kwargs):
-    client = _get_groq_client()
+def _call_groq(client,model, messages, max_tokens, **kwargs):
+    #client = _get_groq_client()
     response = client.chat.completions.create(
         model=model,
         messages=messages,
@@ -145,6 +144,17 @@ class LLMWatch:
         self.max_retries = max_retries
         self.retry_delay = retry_delay
         self._caller     = PROVIDER_MAP[provider]
+        self._client     = self._init_client() # Initialize client once to reuse connections if possible, thus reduce latency and cost.
+        
+    def _init_client(self):
+        if self.provider == "openai":
+            return _get_openai_client()
+        elif self.provider == "anthropic":
+            return _get_anthropic_client()
+        elif self.provider == "groq":
+            return _get_groq_client()
+        else:
+            raise ValueError(f"Unsupported provider: {self.provider}")
 
     def call(self, messages: list, **kwargs) -> dict:
         attempt = 0
@@ -170,20 +180,29 @@ class LLMWatch:
 
     def _tracked_call(self, messages: list, **kwargs) -> dict:
         start = time.time()
-        response = self._caller(
+        response = self._caller(self._client,
             model=self.model,
             messages=messages,
             max_tokens=self.max_tokens,
+            #stream=True,
             **kwargs
         )
         duration = time.time() - start
+        #first_token_time =None # To prevent time set if no records are returned.
+        #chunks=[]
+        
+        #for chunk in response:
+        #    if first_token_time is None:
+        #        first_token_time = time.time() - start
+         #   chunks.append(chunk)
+            
+       # TIME_TO_FIRST_TOKEN.labels(provider=self.provider, model=self.model).observe(first_token_time)
         
         cost = calculate_cost(
         self.model,
         response["input_tokens"],
         response["output_tokens"])
         response["cost_usd"] = cost
-        
         
         record_llm_call(
             provider=self.provider,
