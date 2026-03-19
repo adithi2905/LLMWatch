@@ -6,6 +6,8 @@
 import time
 import warnings
 from prometheus_client import Counter, Histogram, Gauge
+import os
+import json
 
 REQUEST_DURATION = Histogram(
     'llm_request_duration_seconds',
@@ -84,25 +86,34 @@ AGENT_CONFIDENCE = Histogram(
     'Per agent certainty score',
     ['agent_name']
 )
-
+# built-in defaults — always available
 COST_PER_1K_TOKENS = {
-    "gpt-4o": {"input": 0.0025, "output": 0.010},
-    "gpt-4o-mini": {"input": 0.000150, "output": 0.000600},
-    "claude-sonnet-4-6": {"input": 0.003, "output": 0.015},
-    "claude-opus-4-6": {"input": 0.015, "output": 0.075}
+    "gpt-4o":           {"input": 0.0025,   "output": 0.010},
+    "gpt-4o-mini":      {"input": 0.000150, "output": 0.000600},
+    "claude-sonnet-4-6":{"input": 0.003,    "output": 0.015},
+    "claude-opus-4-6":  {"input": 0.015,    "output": 0.075}
 }
 
+def _load_pricing() -> dict:
+    custom = os.getenv("LLMWATCH_PRICING_PATH")
+    if custom and os.path.exists(custom):
+        with open(custom) as f:
+            return json.load(f)
+    return COST_PER_1K_TOKENS # fallback mechanism
+
+PRICING = _load_pricing()
+
 def calculate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
-    if model not in COST_PER_1K_TOKENS:
+    if model not in PRICING:
         warnings.warn(  
             f"LLMWatch: no pricing data for model '{model}'. "
             f"Cost will be recorded as $0.00. "
-            f"Add it to COST_PER_1K_TOKENS in metrics.py.",
+            f"Add it to PRICING in metrics.py.",
             UserWarning,
             stacklevel=2
         )
         return 0.0
-    rates = COST_PER_1K_TOKENS[model]
+    rates = PRICING[model]
     return (input_tokens / 1000) * rates["input"] + (output_tokens / 1000) * rates["output"]
 
 
