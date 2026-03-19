@@ -27,12 +27,14 @@ Usage:
 
 import sqlite3
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 
-DB_PATH = os.getenv("LLMWATCH_DB_PATH", "llmwatch.db")
-
+DB_PATH = os.getenv(
+    "LLMWATCH_DB_PATH",
+    os.path.join(os.path.expanduser("~"), ".llmwatch", "llmwatch.db")
+)
 
 CREATE_TABLE_SQL = """
     CREATE TABLE IF NOT EXISTS llm_calls (
@@ -58,6 +60,7 @@ class LLMLogger:
         self._init_db()
 
     def _init_db(self):
+        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
         with self._connect() as conn:
             conn.execute(CREATE_TABLE_SQL)
 
@@ -90,7 +93,7 @@ class LLMLogger:
                     error
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
-                datetime.utcnow().isoformat(),
+                datetime.now(timezone.utc).isoformat(), #utc deprecated as it doesn't return any timezone
                 event.get("provider"),
                 event.get("model"),
                 event.get("input_tokens", 0),
