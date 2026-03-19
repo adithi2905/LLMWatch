@@ -4,6 +4,7 @@
 # Records are updated via record_llm_call() and record_agent_metrics()
 
 import time
+import warnings
 from prometheus_client import Counter, Histogram, Gauge
 
 REQUEST_DURATION = Histogram(
@@ -93,6 +94,13 @@ COST_PER_1K_TOKENS = {
 
 def calculate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
     if model not in COST_PER_1K_TOKENS:
+        warnings.warn(  
+            f"LLMWatch: no pricing data for model '{model}'. "
+            f"Cost will be recorded as $0.00. "
+            f"Add it to COST_PER_1K_TOKENS in metrics.py.",
+            UserWarning,
+            stacklevel=2
+        )
         return 0.0
     rates = COST_PER_1K_TOKENS[model]
     return (input_tokens / 1000) * rates["input"] + (output_tokens / 1000) * rates["output"]
