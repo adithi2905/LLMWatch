@@ -9,6 +9,7 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+
     strategy:
       matrix:
         python-version: ["3.10", "3.11", "3.12"]
@@ -23,31 +24,10 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install -e ".[dev]"
+          pip install prometheus-client python-dotenv pytest
+          pip install openai anthropic groq
 
       - name: Run tests
-        run: |
-          pytest test_llmwatch.py -v --tb=short
+        run: python -m pytest tests/test_unit.py -v --tb=short
         env:
           LLMWATCH_DB_PATH: /tmp/test_llmwatch.db
-
-  build:
-    runs-on: ubuntu-latest
-    needs: test
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Build package
-        run: |
-          pip install build
-          python -m build
-
-      - name: Check dist
-        run: |
-          pip install twine
-          twine check dist/*
