@@ -23,9 +23,8 @@ Usage:
 import time
 import os
 from llmwatch.logger import LLMLogger
-from llmwatch.metrics import TIME_TO_FIRST_TOKEN, record_llm_call
+from llmwatch.metrics import TIME_TO_FIRST_TOKEN, record_llm_call, calculate_cost
 from prometheus_client import Counter
-from llmwatch.metrics import calculate_cost
 
 ERRORS_TOTAL = Counter(
     'llm_errors_total',
@@ -64,52 +63,114 @@ def _get_groq_client():
         raise ImportError("Run: pip install groq")
 
 
-def _call_openai(client,model, messages, max_tokens, **kwargs):
-   # client = _get_openai_client() ->removed since we initialize client once in __init__ to reuse connections and reduce latency and cost.
-    response = client.chat.completions.create(
+def _call_openai(client, model, messages, max_tokens, **kwargs):
+    start = time.time()
+    first_token_time = None
+    content = ""
+    input_tokens = 0
+    output_tokens = 0
+
+    stream = client.chat.completions.create(
         model=model,
         messages=messages,
         max_tokens=max_tokens,
+        stream=True,
+        stream_options={"include_usage": True},
         **kwargs
     )
+
+    for chunk in stream:
+        # first chunk with actual content → record TTFT
+        if (first_token_time is None
+                and chunk.choices
+                and chunk.choices[0].delta.content):
+            first_token_time = time.time() - start
+
+        # accumulate content
+        if chunk.choices and chunk.choices[0].delta.content:
+            content += chunk.choices[0].delta.content
+
+        # last chunk contains usage
+        if chunk.usage:
+            input_tokens = chunk.usage.prompt_tokens
+            output_tokens = chunk.usage.completion_tokens
+
     return {
-        "content":       response.choices[0].message.content,
-        "input_tokens":  response.usage.prompt_tokens,
-        "output_tokens": response.usage.completion_tokens,
+        "content":       content,
+        "input_tokens":  input_tokens,
+        "output_tokens": output_tokens,
+        "ttft":          first_token_time or 0.0,
         "model":         model,
         "provider":      "openai"
     }
 
 
 def _call_anthropic(client, model, messages, max_tokens, **kwargs):
-    #client = _get_anthropic_client() -> removed since we initialize client once in __init__ to reuse connections and reduce latency and cost.`
-    response = client.messages.create(
+    start = time.time()
+    first_token_time = None
+    content = ""
+    input_tokens = 0
+    output_tokens = 0
+
+    with client.messages.stream(
         model=model,
         messages=messages,
         max_tokens=max_tokens,
         **kwargs
-    )
+    ) as stream:
+        for text in stream.text_stream:
+            if first_token_time is None:
+                first_token_time = time.time() - start
+            content += text
+
+        # usage available after stream completes
+        final = stream.get_final_message()
+        input_tokens = final.usage.input_tokens
+        output_tokens = final.usage.output_tokens
+
     return {
-        "content":       response.content[0].text,
-        "input_tokens":  response.usage.input_tokens,
-        "output_tokens": response.usage.output_tokens,
+        "content":       content,
+        "input_tokens":  input_tokens,
+        "output_tokens": output_tokens,
+        "ttft":          first_token_time or 0.0,
         "model":         model,
         "provider":      "anthropic"
     }
 
 
-def _call_groq(client,model, messages, max_tokens, **kwargs):
-    #client = _get_groq_client()
-    response = client.chat.completions.create(
+def _call_groq(client, model, messages, max_tokens, **kwargs):
+    start = time.time()
+    first_token_time = None
+    content = ""
+    input_tokens = 0
+    output_tokens = 0
+
+    stream = client.chat.completions.create(
         model=model,
         messages=messages,
         max_tokens=max_tokens,
+        stream=True,
         **kwargs
     )
+
+    for chunk in stream:
+        if (first_token_time is None
+                and chunk.choices
+                and chunk.choices[0].delta.content):
+            first_token_time = time.time() - start
+
+        if chunk.choices and chunk.choices[0].delta.content:
+            content += chunk.choices[0].delta.content
+
+        if hasattr(chunk, 'x_groq') and chunk.x_groq and chunk.x_groq.usage:
+            input_tokens = chunk.x_groq.usage.prompt_tokens
+            output_tokens = chunk.x_groq.usage.completion_tokens
+
     return {
-        "content":       response.choices[0].message.content,
-        "input_tokens":  response.usage.prompt_tokens,
-        "output_tokens": response.usage.completion_tokens,
+        "content":       content,
+        "input_tokens":  input_tokens,
+        "output_tokens": output_tokens,
+        "ttft":          first_token_time or 0.0,
         "model":         model,
         "provider":      "groq"
     }
@@ -132,7 +193,7 @@ class LLMWatch:
         max_retries: int = 3,
         retry_delay: float = 1.0,
     ):
-        self._logger = LLMLogger() 
+        self._logger = LLMLogger()
         if provider not in PROVIDER_MAP:
             raise ValueError(
                 f"Unknown provider: {provider}. "
@@ -144,8 +205,8 @@ class LLMWatch:
         self.max_retries = max_retries
         self.retry_delay = retry_delay
         self._caller     = PROVIDER_MAP[provider]
-        self._client     = self._init_client() # Initialize client once to reuse connections if possible, thus reduce latency and cost.
-        
+        self._client     = self._init_client()
+
     def _init_client(self):
         if self.provider == "openai":
             return _get_openai_client()
@@ -180,30 +241,29 @@ class LLMWatch:
 
     def _tracked_call(self, messages: list, **kwargs) -> dict:
         start = time.time()
-        response = self._caller(self._client,
+        response = self._caller(
+            self._client,
             model=self.model,
             messages=messages,
             max_tokens=self.max_tokens,
-            #stream=True,
             **kwargs
         )
         duration = time.time() - start
-        #first_token_time =None # To prevent time set if no records are returned.
-        #chunks=[]
-        
-        #for chunk in response:
-        #    if first_token_time is None:
-        #        first_token_time = time.time() - start
-         #   chunks.append(chunk)
-            
-       # TIME_TO_FIRST_TOKEN.labels(provider=self.provider, model=self.model).observe(first_token_time)
-        
+
+        # record TTFT if available
+        if response.get("ttft"):
+            TIME_TO_FIRST_TOKEN.labels(
+                provider=self.provider,
+                model=self.model
+            ).observe(response["ttft"])
+
         cost = calculate_cost(
-        self.model,
-        response["input_tokens"],
-        response["output_tokens"])
+            self.model,
+            response["input_tokens"],
+            response["output_tokens"]
+        )
         response["cost_usd"] = cost
-        
+
         record_llm_call(
             provider=self.provider,
             model=self.model,
@@ -222,7 +282,7 @@ class LLMWatch:
             "response":      response["content"],
             "error":         None
         })
-        
+
         response["duration"] = duration
         return response
 

@@ -51,7 +51,11 @@ CREATE_TABLE_SQL = """
         error           TEXT
     )
 """
-
+CREATE_INDEXES_SQL = [
+    "CREATE INDEX IF NOT EXISTS idx_timestamp ON llm_calls(timestamp DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_provider  ON llm_calls(provider)",
+    "CREATE INDEX IF NOT EXISTS idx_model     ON llm_calls(model)",
+]
 
 class LLMLogger:
 
@@ -63,6 +67,8 @@ class LLMLogger:
         os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
         with self._connect() as conn:
             conn.execute(CREATE_TABLE_SQL)
+            for sql in CREATE_INDEXES_SQL:
+                conn.execute(sql)
 
     def _connect(self) -> sqlite3.Connection:
         return sqlite3.connect(self.db_path)
