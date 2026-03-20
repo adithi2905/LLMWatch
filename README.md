@@ -1,6 +1,5 @@
 # LLMWatch
 
-![CI](https://github.com/adithi2905/LLMWatch/actions/workflows/ci.yml/badge.svg)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
@@ -12,19 +11,19 @@ Generic LLM observability middleware for Python. Track latency, cost, TTFT, and 
 
 ### Latency, cost, and cost forecasting
 
-![Latency and cost overview](docs\results\result3.png)
+![Latency and cost overview](docs/results/result3.png)
 
 Real-time tracking of avg latency, p95/p99 percentiles, actual cost, and projected monthly spend — updated every 10 seconds.
 
 ### Token usage and agent decisions
 
-![Token usage and agent decisions](docs\results\result4.png)
+![Token usage and agent decisions](docs/results/result4.png)
 
 Input vs output token rates per minute, and real agent decision distribution (WAIT / EXPEDITE / SWITCH / UNKNOWN) parsed directly from LLM responses.
 
 ### Agent metrics and TTFT
 
-![Agent metrics and TTFT](docs\results\result5.png)
+![Agent metrics and TTFT](docs/results/result5.png)
 
 Time to First Token (TTFT) — p50, p95, p99 — measured via streaming across all providers. Avg TTFT: ~1s. Separate from total latency so you know what the user actually feels.
 
