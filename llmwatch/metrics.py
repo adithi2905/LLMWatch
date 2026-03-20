@@ -142,7 +142,7 @@ class CostForecaster:
             return 0.0
         total_cost = sum(c for _, c in self._cost_log)
         elapsed_minutes = (now - self._cost_log[0][0]) / 60
-        if elapsed_minutes < 0.01:
+        if elapsed_minutes < 0.0001:
             return 0.0
         return total_cost / elapsed_minutes
 
