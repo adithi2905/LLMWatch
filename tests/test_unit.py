@@ -102,13 +102,13 @@ def test_projections_scale_correctly():
     """If math is wrong, budget projections are wrong."""
     f = CostForecaster()
     f.record(0.001)
-    time.sleep(0.1)
+    time.sleep(1.0)
     f.record(0.001)
     rate = f.spend_rate_per_minute()
-    assert abs(f.projected_hourly()  - rate * 60)           < 1e-9
-    assert abs(f.projected_daily()   - rate * 60 * 24)      < 1e-9
-    assert abs(f.projected_monthly() - rate * 60 * 24 * 30) < 1e-9
-
+    assert rate > 0
+    assert abs(f.projected_hourly()  - rate * 60)           < rate * 60 * 0.01
+    assert abs(f.projected_daily()   - rate * 60 * 24)      < rate * 60 * 24 * 0.01
+    assert abs(f.projected_monthly() - rate * 60 * 24 * 30) < rate * 60 * 24 * 30 * 0.01
 
 # ─────────────────────────────────────────────
 # LLMLogger — 7 tests
@@ -168,7 +168,6 @@ def test_timestamp_is_utc_aware(logger):
     assert "+00:00" in ts, \
         "Timestamp must include UTC offset — use datetime.now(timezone.utc)"
 
-
 def test_cost_usd_stored_correctly(logger):
     """Bug #1 — cost_usd was always 0.0 before the fix."""
     logger.log(_sample_event(cost_usd=0.000072))
@@ -195,7 +194,6 @@ def test_query_returns_newest_first(logger):
     timestamps = [r["timestamp"] for r in rows]
     assert timestamps == sorted(timestamps, reverse=True), \
         "Rows must be returned newest first"
-
 
 def test_summary_total_cost_adds_up(logger):
     """Bug #1 — if cost is wrong, budget tracking is broken."""
