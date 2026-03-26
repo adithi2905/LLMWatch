@@ -3,7 +3,9 @@
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-Generic LLM observability middleware for Python. Track latency, cost, TTFT, and multi-agent metrics across any LLM provider with Prometheus and Grafana.
+Production LLM observability middleware for Python. One wrapper call instruments latency, cost, TTFT, and multi-agent metrics across OpenAI, Anthropic, and Groq.
+
+Verified against 1,049 real API requests, 486K tokens, $0.125 tracked spend. Avg TTFT 1.0s vs 3.3s total latency. CI passing on Python 3.10, 3.11, and 3.12.
 
 ---
 
@@ -13,7 +15,7 @@ Generic LLM observability middleware for Python. Track latency, cost, TTFT, and 
 
 ![Latency and cost overview](docs/results/result3.png)
 
-Real-time tracking of avg latency, p95/p99 percentiles, actual cost, and projected monthly spend — updated every 10 seconds.
+Real-time tracking of avg latency, p95/p99 percentiles, actual cost, and projected monthly spend updated every 10 seconds.
 
 ### Token usage and agent decisions
 
@@ -25,7 +27,7 @@ Input vs output token rates per minute, and real agent decision distribution (WA
 
 ![Agent metrics and TTFT](docs/results/result5.png)
 
-Time to First Token (TTFT) — p50, p95, p99 — measured via streaming across all providers. Avg TTFT: ~1s. Separate from total latency so you know what the user actually feels.
+Time to First Token (TTFT) at p50, p95, p99 measured via streaming across all providers. Avg TTFT ~1s. Separate from total latency so you know what the user actually feels.
 
 ---
 
@@ -33,11 +35,30 @@ Time to First Token (TTFT) — p50, p95, p99 — measured via streaming across a
 
 LLMWatch wraps any LLM API call and automatically records:
 
-- **Latency** — request duration, p95/p99 percentiles, time to first token
-- **Cost** — actual spend + hourly/daily/monthly forecasting with sliding window
-- **Tokens** — input and output token usage per provider and model
-- **Reliability** — errors (counted once per request, not per retry), retries, success rate
-- **Multi-agent** — disagreement scores, debate turns, real decision distribution
+- **Latency** : request duration, p95/p99 percentiles, time to first token
+- **Cost** : actual spend + hourly/daily/monthly forecasting with sliding window
+- **Tokens** : input and output token usage per provider and model
+- **Reliability** : errors counted once per request not per retry attempt, retries, success rate
+- **Multi-agent** : disagreement scores, debate turns, real decision distribution
+
+---
+
+## What was found and fixed
+
+Ten production bugs diagnosed and fixed. Each covered by a targeted regression test.
+
+| Bug | Impact |
+|---|---|
+| Cost tracker logged $0.00 for every call | All spend data was wrong |
+| Retry loop incremented error counter per attempt | 4x overcounting on failures |
+| `datetime.utcnow()` deprecated | Silent breakage on Python 3.12 |
+| Provider client recreated on every call | Unnecessary latency overhead |
+| DB path relative to cwd | `llmwatch.db` committed to git |
+| TTFT metric defined but never populated | Dead metric in dashboard |
+| Agent metrics hardcoded in test | Grafana showed fake data |
+| `_start_time` assigned but never used | Dead code |
+| No DB indexes on timestamp, provider, model | Full table scan on every query |
+| Unknown model cost returned 0.0 silently | Wrong forecasts with no warning |
 
 ---
 
@@ -176,7 +197,7 @@ Unknown models emit a warning and record `$0.00` rather than crashing.
 
 | Metric | Type | Description |
 |---|---|---|
-| `llm_agent_disagreement_score` | Histogram | Agent disagreement (0–1) |
+| `llm_agent_disagreement_score` | Histogram | Agent disagreement (0 to 1) |
 | `llm_agent_debate_turns` | Histogram | Turns before decision |
 | `llm_orchestrator_decisions_total` | Counter | WAIT / EXPEDITE / SWITCH distribution |
 | `llm_agent_confidence_score` | Histogram | Per-agent confidence score |
